@@ -5,6 +5,10 @@ import { rewriteDevAuthCookie } from "./config/proxyCookies.js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
+  if (env.VITE_USE_PROXY !== "true") {
+    return { plugins: [react(), tailwindcss()] };
+  }
+
   // A relative production URL can use a separate upstream for local development.
   const upstream = env.VITE_API_PROXY_TARGET || env.VITE_API_URL;
   const apiUrl = new URL(

@@ -17,8 +17,8 @@ export interface RetryAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
-// Use relative proxy path (/v1) in development to avoid cross-origin cookie rejection
-export const API_BASE_URL = import.meta.env.DEV
+// Vite's proxy is available only in development and when explicitly enabled.
+export const API_BASE_URL = import.meta.env.DEV && import.meta.env.VITE_USE_PROXY === "true"
   ? "/v1"
   : (import.meta.env.VITE_API_URL || "/v1").replace(/\/$/, "");
 

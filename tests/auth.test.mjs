@@ -16,7 +16,7 @@ registerHooks({
   load(url, context, next) {
     if (url.endsWith('.ts') && (url.includes('/src/') || url.includes('/config/'))) {
       return { format: 'module', shortCircuit: true, source: ts.transpileModule(
-        readFileSync(new URL(url), 'utf8').replaceAll('import.meta.env', '({ DEV: true })'),
+        readFileSync(new URL(url), 'utf8').replaceAll('import.meta.env', JSON.stringify({ DEV: process.env.AUTH_TEST_PRODUCTION !== 'true', VITE_USE_PROXY: process.env.AUTH_TEST_PROXY ?? 'true', VITE_API_URL: 'https://api.example.com/v1/' })),
         { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } },
       ).outputText };
     }
@@ -40,7 +40,7 @@ const seed = () => {
   useAuthStore.setState({ isAuthenticated: true, accessToken: 'expired', refreshToken: 'refresh' });
 };
 
-test('development uses the same-origin proxy', () => assert.equal(API_BASE_URL, '/v1'));
+test('API URL respects the proxy switch and production mode', () => assert.equal(API_BASE_URL, process.env.AUTH_TEST_PRODUCTION !== 'true' && process.env.AUTH_TEST_PROXY !== 'false' ? '/v1' : 'https://api.example.com/v1'));
 test('profile extraction accepts direct and nested profiles and rejects missing users', () => {
   const user = { _id: '1', email: 'admin@example.com' };
   for (const data of [user, { user }, { data: user }, { data: { user } }]) assert.equal(getAuthUser(data), user);
