@@ -1,6 +1,6 @@
 // src/services/auth.api.ts
 import api from "./api";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore, type User } from "../store/authStore";
 
 // ============================================================
 // REQUEST & RESPONSE INTERFACES
@@ -122,6 +122,16 @@ export const getSessionId = (response: unknown): string | null => {
 
   return findSessionId(response);
 };
+
+// Accept the profile envelopes used by login and /auth/me.
+export function getAuthUser(response: unknown): User | null {
+  if (!response || typeof response !== "object") return null;
+  const value = response as Record<string, unknown>;
+  if (typeof value._id === "string" && typeof value.email === "string") {
+    return value as unknown as User;
+  }
+  return getAuthUser(value.user) || getAuthUser(value.data);
+}
 
 // ============================================================
 // AUTH API METHODS

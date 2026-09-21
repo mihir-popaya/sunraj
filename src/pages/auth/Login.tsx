@@ -12,24 +12,12 @@ import {
   getCurrentUser,
   getAccessToken,
   getRefreshToken,
-  getSessionId,
-  normalizeToken,
+  getAuthUser,
 } from "../../services/auth.api";
 import { useAuthStore } from "../../store/authStore";
 import { loginSchema } from "../../schemas/login.schema";
 
 import logo from "../../assets/images/logo.jpg";
-
-/* =========================================================
-   TYPES
-========================================================= */
-
-interface AuthResponseData {
-  user?: any;
-  token?: string;
-  accessToken?: string;
-  [key: string]: any;
-}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -89,86 +77,33 @@ export default function Login() {
         return;
       }
 
-      // STEP 2: Extract and persist tokens before making any follow-up request.
-      const responseData = response?.data as AuthResponseData | undefined;
-      const token = normalizeToken(
-        getAccessToken(response) ||
-          responseData?.accessToken ||
-          responseData?.token ||
-          (response as any)?.accessToken ||
-          (response as any)?.token
-      );
+      // Replace stale credentials before checking the new server session.
+      useAuthStore.getState().clearAuth();
+      useAuthStore.getState().setAccessToken(getAccessToken(response));
+      useAuthStore.getState().setRefreshToken(getRefreshToken(response));
 
-      const rToken = normalizeToken(
-        getRefreshToken(response) ||
-          responseData?.refreshToken ||
-          responseData?.refresh_token ||
-          (response as any)?.refreshToken ||
-          (response as any)?.refresh_token
-      );
-          const sessionId = getSessionId(response);
-
-      // STEP 3: Save Tokens Synchronously to Storage
-      if (token) {
-        useAuthStore.getState().setAccessToken(token);
-        localStorage.setItem("accessToken", token);
-        localStorage.setItem("token", token);
-      }
-      if (rToken) {
-        localStorage.setItem("refreshToken", rToken);
-      }
-      if (sessionId) {
-        localStorage.setItem("sessionId", sessionId);
+      const meResponse = await getCurrentUser();
+      const authenticatedUser = getAuthUser(meResponse);
+      if (meResponse.success === false || !authenticatedUser) {
+        throw new Error("The server did not confirm your session. Please try signing in again.");
       }
 
-      let authenticatedUser =
-        responseData?.user ||
-        (response as any)?.user;
-
-      if (!authenticatedUser) {
-        try {
-          const meResponse = await getCurrentUser();
-          const meData = meResponse?.data as AuthResponseData | undefined;
-
-          if (meResponse?.success !== false && (meData?.user || (meResponse as any)?.user)) {
-            authenticatedUser = meData?.user || (meResponse as any)?.user;
-          }
-        } catch (meError) {
-          console.warn("Could not fetch user via /auth/me:", meError);
-        }
-      }
-
-      // Fallback user if backend succeeded but didn't return full user object
-      if (!authenticatedUser) {
-        authenticatedUser = {
-          _id: "admin-user",
-          full_name: email.split("@")[0] || "Administrator",
-          email: email.trim(),
-          phone_number: "",
-          is_active: true,
-          role: {
-            _id: "admin",
-            role_name: "Admin",
-            permissions: ["*"],
-          },
-        };
-      }
-
-      // STEP 4: Save User in Zustand Store & Navigate
-      setUser(authenticatedUser, token, rToken);
+      // Read current tokens because /auth/me may have refreshed them.
+      const { accessToken, refreshToken } = useAuthStore.getState();
+      setUser(authenticatedUser, accessToken, refreshToken);
 
       navigate("/admin/dashboard", {
         replace: true,
       });
     } catch (error: unknown) {
-      console.error("Login error:", error);
+      useAuthStore.getState().clearAuth();
 
       if (axios.isAxiosError(error) && error.response) {
         const status = error.response.status;
         const backendMessage = error.response.data?.message;
 
         if (status === 401) {
-          setServerError(backendMessage || "Invalid email or password.");
+          setServerError(backendMessage || "Sign-in failed or your session could not be established. Please try again.");
         } else if (status === 403) {
           setServerError(
             backendMessage || "You are not authorized to access the admin panel."
@@ -178,7 +113,9 @@ export default function Login() {
         }
       } else {
         setServerError(
-          "Unable to connect to the server. Please check your connection and try again."
+          error instanceof Error && !axios.isAxiosError(error)
+            ? error.message
+            : "Unable to connect to the server. Please check your connection and try again."
         );
       }
     } finally {

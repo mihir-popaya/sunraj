@@ -7,7 +7,7 @@ interface UserRole {
   permissions: string[];
 }
 
-interface User {
+export interface User {
   _id: string;
   full_name: string;
   email: string;
